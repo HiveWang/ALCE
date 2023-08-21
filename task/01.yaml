@@ -1,0 +1,14 @@
+# - script: run.py
+  # args: ['eli5_turbo_shot2_ndoc5_oracle_default.yaml','--azure','--quick_test=100','--openai_api=True']
+#   args: ['--config=configs/eli5_turbo_shot1_ndoc5_bjsw_default7.yaml', '--azure','--quick_test=100','--openai_api=Ture']
+  # args: ['--config=configs/eli5_turbo_shot2_ndoc5_bjsw_default4.yaml', '--azure','--quick_test=100','--openai_api=Ture']
+  # args: ['--config=configs/eli5_turbo_shot2_ndoc5_bjsw_default6.yaml', '--azure','--quick_test=100','--openai_api=Ture']
+  # args: ['--config=configs/eli5_llama-13b_shot2_ndoc3_bm25_light_inst.yaml', '--azure','--quick_test=2','--openai_api=Ture']
+- script: eval.py
+  args: ['--f=./result/eli5-gpt-35-turbo-shot_change_2-shot2-ndoc5-42-azure-quick_test100.json','--claims_nli','--citations','--no_rouge','--batch=10']
+
+#  args: ['--f=./result/eli5-gpt-35-turbo-bm25_light_inst-shot2-ndoc5-42-azure-quick_test100.json','--claims_nli','--citations','--no_rouge']
+  # args: ['--f=./result/eli5-gpt-35-turbo-bjswv4-shot2-ndoc5-42-azure-quick_test100.json','--claims_nli','--citations','--no_rouge']
+  # args: ['--f=./result/eli5-gpt-35-turbo-bjswv4-shot2-ndoc5-42-azure-quick_test100.json','--claims_nli','--citations']
+  # args: ['--f=./result/eli5-gpt-35-turbo-bjswv6-shot2-ndoc5-42-azure-quick_test100.json','--claims_nli','--citations','--batch=2']
+

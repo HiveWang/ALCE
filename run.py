@@ -1,10 +1,6 @@
 import logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-
-import argparse
 import os
+import argparse
 import openai
 import json
 from tqdm import tqdm
@@ -17,6 +13,31 @@ from searcher import SearcherWithinDocs
 import yaml
 from utils import *
 from nltk import sent_tokenize
+import openai
+from config import openai_conf
+
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger("run_main")
+logger.setLevel(logging.INFO)
+
+log_dir = './log'
+if not os.path.exists(log_dir):
+    os.makedirs(log_dir)
+
+# 创建文件处理器
+file_handler = logging.FileHandler(f'{log_dir}/run_main.log')
+file_handler.setLevel(logging.INFO)
+# 日志格式器
+formatter = logging.Formatter('%(asctime)s-%(name)s-%(levelname)s-%(message)s')
+file_handler.setFormatter(formatter)
+# 添加到logger处理器
+logger.addHandler(file_handler)
+
+
+openai.api_key = openai_conf['azure']['api_key']
+openai.api_base = openai_conf['azure']['api_base']
+
 
 def remove_citations(sent):
     return re.sub(r"\[\d+", "", re.sub(r" \[\d+", "", sent)).replace(" |", "").replace("]", "")
@@ -27,20 +48,16 @@ class LLM:
         self.args = args
 
         if args.openai_api:
-            import openai 
-            OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-            OPENAI_ORG_ID = os.environ.get("OPENAI_ORG_ID")
-            OPENAI_API_BASE = os.environ.get("OPENAI_API_BASE")
 
             if args.azure:
-
-                openai.api_key = OPENAI_API_KEY
-                openai.api_base = OPENAI_API_BASE
+                openai.api_key = openai_conf['azure']['api_key']
+                openai.api_base = openai_conf['azure']['api_base']
+                openai.api_engine = 'gpt-35-turbo'
                 openai.api_type = 'azure'
-                openai.api_version = '2022-12-01' 
+                openai.api_version = '2023-05-15' 
             else: 
-                openai.api_key = OPENAI_API_KEY
-                openai.organization = OPENAI_ORG_ID
+                openai.api_key = openai_conf['azure']['api_key']
+                openai.api_base = openai_conf['azure']['api_base']
 
             self.tokenizer = AutoTokenizer.from_pretrained("gpt2", fast_tokenizer=False) # TODO: For ChatGPT we should use a different one
             self.total_tokens = 0 # To keep track of how much the API costs
@@ -71,9 +88,9 @@ class LLM:
                 ]
             else:
                 if "turbo" in args.model:
-                    deploy_name = "gpt-35-turbo-0301"
+                    deploy_name = "gpt-35-turbo"
                 else:
-                    deploy_name = args.model
+                    deploy_name = "gpt-35-turbo"
 
             if "turbo" in args.model and not args.azure:
                 is_ok = False
@@ -81,6 +98,7 @@ class LLM:
                 while not is_ok:
                     retry_count += 1
                     try:
+
                         response = openai.ChatCompletion.create(
                             model=args.model,
                             messages=prompt,
@@ -94,16 +112,17 @@ class LLM:
                         if retry_count <= 5:
                             logger.warning(f"OpenAI API retry for {retry_count} times ({error})")
                             continue
-                        print(error)
                         import pdb; pdb.set_trace()
                 self.total_tokens += response['usage']['total_tokens']
                 return response['choices'][0]['message']['content']
             else:
+                logger.info("-----------------------------------")
                 is_ok = False
                 retry_count = 0
                 while not is_ok:
                     retry_count += 1
                     try:
+                        # logger.info(prompt)
                         response = openai.Completion.create(
                             engine=deploy_name if args.azure else None,
                             model=args.model,
@@ -127,6 +146,8 @@ class LLM:
                 self.total_tokens += response['usage']['total_tokens']
                 return response['choices'][0]['text']
         else:
+            logger.info("***********************************")
+
             inputs = self.tokenizer([prompt], return_tensors="pt").to(self.model.device)
             stop = [] if stop is None else stop
             stop = list(set(stop + ["\n", "Ċ", "ĊĊ", "<0x0A>"])) # In Llama \n is <0x0A>; In OPT \n is Ċ
@@ -142,6 +163,17 @@ class LLM:
             )
             generation = self.tokenizer.decode(outputs[0][inputs['input_ids'].size(1):], skip_special_tokens=True)
             return generation
+
+import pickle
+def list_to_pickle(list_raw,file_name):
+    with open(f"{file_name}.pickle",'wb') as f:
+        pickle.dump(list_raw,f)
+
+#unpickle
+def comeback_list_from_pickle(file_name):
+    with open(f"{file_name}.pickle",'rb') as f:
+        return pickle.load(f)
+
 
 
 def main():
@@ -220,7 +252,7 @@ def main():
 
     if "turbo" in args.model:
         # ChatGPT has a longer max length
-        logger.info("Change the max length to 4096 for ChatGPT.")
+        logger.info("Change the max length to 8064 for ChatGPT.")
         args.max_length = 4096
 
     # Load the model or setup the API
@@ -252,7 +284,20 @@ def main():
 
     # Sample quick test
     if args.quick_test is not None:
-        eval_ids = np.random.choice(len(eval_data), args.quick_test, replace=False)
+
+        logger.info(f"Sample length(total)={len(eval_data)}")
+        file_path = args.prompt_file+"_"+str(args.quick_test)+"__ids"
+        logger.info(file_path)
+        eval_ids = []
+        if not os.path.exists(file_path):
+            eval_ids = np.random.choice(len(eval_data), args.quick_test, replace=False)
+            logger.info(eval_ids)
+            # list_to_pickle(eval_ids,file_path)
+            # eval_ids = comeback_list_from_pickle("./prompts/eli5_default.json_1000__ids")   #-----------------
+        else:
+            eval_ids=comeback_list_from_pickle("./prompts/eli5_default.json_1000__ids")
+        logger.info(f"ids={eval_ids}")
+
         eval_data = [eval_data[int(idx)] for idx in eval_ids]
 
     logger.info("Generating prompts...") 
@@ -381,10 +426,10 @@ def main():
             if output_array[-1].endswith("End."):
                 output_array[-1] = output_array[-1][:-len("End.")]
 
-            logger.info(f"Prompt length={prompt_len}")
-            logger.info(f"Question: {item['question']}")
-            logger.info(f"Gold answer: {item['answer']}")
-            logger.info(f"Final model output: {output_array[-1]}") 
+            logger.info(f"[Prompt length]={prompt_len}")
+            logger.info(f"[Question] {item['question']}")
+            logger.info(f"[Gold answer] {item['answer']}")
+            logger.info(f"[Final output] {output_array[-1]}") 
         
         item['output'] = output_array if len(output_array) > 1 else output_array[0]
         

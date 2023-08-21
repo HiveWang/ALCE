@@ -5,17 +5,30 @@ import re
 import string
 import torch
 import copy
-
+import os
 from nltk import sent_tokenize
 import numpy as np
 from rouge_score import rouge_scorer, scoring
 from tqdm import tqdm
 import sys
 import logging
-logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s - %(message)s',
+logging.basicConfig(format='%(asctime)s-%(levelname)s-%(name)s-%(message)s',
                     datefmt='%m/%d/%Y %H:%M:%S')
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("evla_main")
 logger.setLevel(logging.INFO)
+
+log_dir = './log'
+if not os.path.exists(log_dir):
+    os.makedirs(log_dir)
+# 创建文件处理器
+file_handler = logging.FileHandler(f'{log_dir}/evla_main.log')
+file_handler.setLevel(logging.INFO)
+# 创建日志格式化器
+formatter = logging.Formatter('%(asctime)s-%(name)s-%(levelname)s-%(message)s')
+file_handler.setFormatter(formatter)
+# console_handler.setFormatter(formatter)
+# 添加处理器到 logger
+logger.addHandler(file_handler)
 
 from transformers import (
     AutoModelForSeq2SeqLM,
@@ -30,6 +43,13 @@ AUTOAIS_MODEL="google/t5_xxl_true_nli_mixture"
 
 global autoais_model, autoais_tokenizer
 autoais_model, autoais_tokenizer = None, None
+global citations_prompt_tokens_total, citations_completion_tokens_total, citations_tokens_total
+citations_prompt_tokens_total, citations_completion_tokens_total, citations_tokens_total=0,0,0
+
+global claims_prompt_tokens_total, claims_completion_tokens_total,claims_tokens_total
+claims_prompt_tokens_total, claims_completion_tokens_total, claims_tokens_total = 0,0,0
+
+
 
 
 def compute_f1(a_gold, a_pred):
@@ -151,7 +171,6 @@ def compute_rouge(data):
     r1 = ['\n'.join(sent_tokenize(text.lower())) for text in r1]
     r2 = ['\n'.join(sent_tokenize(text.lower())) for text in r2]
     scores = _rouge_calculation(h, r1, r2)
-
     return scores['rougeLsum']
 
 
@@ -181,7 +200,7 @@ def compute_str_em(data):
 
 def compute_len(data):
     """Compute average length of predictions."""
-
+    # 平均每个output的句子个数
     res, cntr = 0, 0
     for item in data:
         res += len(item["output"].split())
@@ -240,8 +259,10 @@ def compute_qa(data):
 
 def compute_mauve(data):
     """Compute Mauve score."""
-
+    logger.info("------------------------")
     logger.info("Computing MAUVE...")
+    logger.info("------------------------")
+
     human_data = []
     model_data = []
     for item in data:
@@ -250,7 +271,7 @@ def compute_mauve(data):
         # Truncate by 100 words
         human_data.append(' '.join((item['question'] + " " + item['answer'].strip()).split()[:100]).rstrip(string.punctuation))
         model_data.append(' '.join((item['question'] + " " + item['output'].strip()).split()[:100]).rstrip(string.punctuation))
-
+        logger.info(f"human_data.length={len(human_data)}")
     import mauve
     out = mauve.compute_mauve(
         p_text=human_data,
@@ -278,22 +299,99 @@ def _run_nli_autoais(passage, claim):
     inference = 1 if result == "1" else 0
     return inference
 
+def get_prompt():
+    prompt="""Task: Plese check if the provided premise can entail the hypothesis.
+Instructions:
+- Output 'Entailment' if the premise can entail the hypothesis otherwise 'Contradiction'
+- Only output the type 'Entailment' or 'Contradiction', nothing else
 
-def compute_claims(data):
-    global autoais_model, autoais_tokenizer
-    if autoais_model is None:
-        logger.info("Loading AutoAIS model...")
-        autoais_model = AutoModelForSeq2SeqLM.from_pretrained(AUTOAIS_MODEL, torch_dtype=torch.bfloat16, max_memory=get_max_memory(), device_map="auto")
-        autoais_tokenizer = AutoTokenizer.from_pretrained(AUTOAIS_MODEL, use_fast=False)
+Premise:{P}
+Hypothesis:{H}
+"""
+#     prompt="""Task: Plese check if the provided premise can entail the hypothesis.
+# Use two steps to generate your answer:
+# Step 1: 
+# - Solely rely on the provided premise, don't use your own knowledge
+# - Use logical thinking and explain your logic
 
-    logger.info("Computing claims...")
+# Step 2:
+# - Output 'Entailment' if the premise can entail the hypothesis otherwise 'Contradiction'
+# - Only output the type 'Entailment' or 'Contradiction', nothing else
+
+# Please output give me the output of step 2
+# Premise:{P}
+# Hypothesis:{H}
+# """
+    return prompt
+            
+
+def _run_nli_gpt35(passage, claim):
+    """
+    Run inference for assessing AIS between a premise and hypothesis.
+    """
+    from config import openai_conf
+    import openai
+    import json
+    prompt = get_prompt()
+    logger.info(f"[P] {passage}")
+    logger.info(f"[H] {claim}")
+    # prompt = json.load(open('./prompts/entail_prompt.json', 'r'))
+    # prompt['Premise']=prompt['Premise'].replace("{P}",passage)
+    # prompt['Hypothesis']=prompt['Hypothesis'].replace("{H}",claim)
+    # formatted_json_string = json.dumps(prompt, indent=4)
+    prompt=prompt.replace("{P}",passage).replace("{H}",claim)
+    
+    print(prompt)
+    messages = [{'role':'system','content':prompt}]
+    openai.api_key = openai_conf['azure']['api_key']
+    openai.api_base = openai_conf['azure']['api_base']
+    openai.api_type = 'azure'
+    openai.api_version = openai_conf['azure']['api_version']
+
+    response = openai.ChatCompletion.create(
+        model=openai_conf['azure']['api_engine'], 
+        engine=openai_conf['azure']['api_engine'],
+        temperature=0.1,
+        messages=messages
+    )
+
+    classification = 'None'
+
+    if 'content' in response['choices'][0]['message']:
+        classification = response['choices'][0]['message']['content']
+        
+    logger.info(f"[R] {classification}")
+    logger.info("[Done]---------------------------------------------------------\n")
+    result = 1 if "Entailment".lower() in classification.lower() else 0
+    # result = autoais_tokenizer(classificaton, skip_special_tokens=True)
+    # inference = 1 if result == "1" else 0
+    return result, response['usage']
+
+
+
+def compute_claims(data): # Correctness 
+    global claims_prompt_tokens_total, claims_completion_tokens_total,claims_tokens_total
+    # if autoais_model is None:
+    #     logger.info("Loading AutoAIS model...")
+    #     autoais_model = AutoModelForSeq2SeqLM.from_pretrained(AUTOAIS_MODEL, torch_dtype=torch.bfloat16, max_memory=get_max_memory(), device_map="auto")
+    #     autoais_tokenizer = AutoTokenizer.from_pretrained(AUTOAIS_MODEL, use_fast=False)
+
+    logger.info("[Correc.] Computing claims...")
     scores = []
     for item in tqdm(data):
         normalized_output = remove_citations(item['output'])
         entail = 0
+        logger.info("[Start]--------------------Correctness------------------------------")
         claims = item["claims"]
         for claim in claims:
-            entail += _run_nli_autoais(normalized_output, claim)
+            # entail += _run_nli_autoais(normalized_output, claim)
+            # entail += _run_nli_gpt35(normalized_output, claim)
+            res, usage = _run_nli_gpt35(normalized_output, claim)
+            entail += res
+            claims_prompt_tokens_total += usage['prompt_tokens']
+            claims_completion_tokens_total += usage['completion_tokens']
+            claims_tokens_total += usage['total_tokens']
+
         scores.append(entail / len(claims))
     return 100 * np.mean(scores)
 
@@ -312,14 +410,15 @@ def compute_autoais(data,
         citation: check citations and use the corresponding references.
         decontext: decontextualize the output
     """
+    # compute_autoais
+    # global autoais_model, autoais_tokenizer
+    # if autoais_model is None:
+    #     logger.info("Loading AutoAIS model...")
+    #     autoais_model = AutoModelForSeq2SeqLM.from_pretrained(AUTOAIS_MODEL, torch_dtype=torch.bfloat16, max_memory=get_max_memory(), device_map="auto")
+    #     autoais_tokenizer = AutoTokenizer.from_pretrained(AUTOAIS_MODEL, use_fast=False)
 
-    global autoais_model, autoais_tokenizer
-    if autoais_model is None:
-        logger.info("Loading AutoAIS model...")
-        autoais_model = AutoModelForSeq2SeqLM.from_pretrained(AUTOAIS_MODEL, torch_dtype=torch.bfloat16, max_memory=get_max_memory(), device_map="auto")
-        autoais_tokenizer = AutoTokenizer.from_pretrained(AUTOAIS_MODEL, use_fast=False)
-
-    logger.info(f"Running AutoAIS...")
+    logger.info(f"[Citation] Running AutoAIS...")
+    global citations_prompt_tokens_total, citations_completion_tokens_total,citations_tokens_total
 
     def _format_document(doc):
         """Format document for AutoAIS."""
@@ -338,7 +437,9 @@ def compute_autoais(data,
     sent_mcite_support = 0
     sent_mcite_overcite = 0
     autoais_log = []
-    for item in tqdm(data):
+    logger.info("[Citation] Get sentences by using NLTK")
+    total_length = len(data)
+    for id,item in enumerate(tqdm(data)):
         # Get sentences by using NLTK
         if qampari:
             sents = [item['question'] + " " + x.strip() for x in item['output'].rstrip().rstrip(".").rstrip(",").split(",")]
@@ -352,13 +453,15 @@ def compute_autoais(data,
         entail = 0
         entail_prec = 0
         total_citations = 0
+        logger.info(f"[Start]------------Citation quality [{id+1}/{total_length}]------------------------------")
+
         for sent_id, sent in enumerate(sents):
             target_sent = target_sents[sent_id] # Citation removed and (if opted for) decontextualized
             joint_entail = -1 # Undecided
 
             # Find references
             ref = [int(r[1:])-1 for r in re.findall(r"\[\d+", sent)] # In text citation id starts from 1
-            logger.info(f"For `{sent}`, find citations {ref}")
+            logger.info(f"[Citation] For `{sent}`, find citations {ref}")
             if len(ref) == 0:
                 # No citations
                 joint_entail = 0
@@ -373,7 +476,11 @@ def compute_autoais(data,
 
             # If not directly rejected by citation format error, calculate the recall score
             if joint_entail == -1: 
-                joint_entail = _run_nli_autoais(joint_passage, target_sent)
+                # joint_entail = _run_nli_gpt35(joint_passage, target_sent)
+                joint_entail, usage = _run_nli_gpt35(joint_passage, target_sent)
+                citations_prompt_tokens_total += usage['prompt_tokens']
+                citations_completion_tokens_total += usage['completion_tokens']
+                citations_tokens_total += usage['total_tokens']
                 autoais_log.append({
                     "question": item['question'],
                     "output": item['output'],
@@ -394,14 +501,23 @@ def compute_autoais(data,
                 for psgs_id in ref:
                     # condition A
                     passage = _format_document(item['docs'][psgs_id]) 
-                    nli_result = _run_nli_autoais(passage, target_sent)
+                    # nli_result = _run_nli_gpt35(passage, target_sent)
+                    nli_result, usage = _run_nli_gpt35(joint_passage, target_sent)
+                    citations_prompt_tokens_total += usage['prompt_tokens']
+                    citations_completion_tokens_total += usage['completion_tokens']
+                    citations_tokens_total += usage['total_tokens']
 
                     # condition B
                     if not nli_result:
                         subset_exclude = copy.deepcopy(ref)
                         subset_exclude.remove(psgs_id)
                         passage = '\n'.join([_format_document(item['docs'][pid]) for pid in subset_exclude])
-                        nli_result = _run_nli_autoais(passage, target_sent)
+
+                        # nli_result = _run_nli_gpt35(passage, target_sent)
+                        nli_result, usage = _run_nli_gpt35(passage, target_sent)
+                        citations_prompt_tokens_total += usage['prompt_tokens']
+                        citations_completion_tokens_total += usage['completion_tokens']
+                        citations_tokens_total += usage['total_tokens']
                         if nli_result: # psgs_id is not necessary
                             flag = 0
                             sent_mcite_overcite += 1 
@@ -482,11 +598,19 @@ def main():
     parser.add_argument("--citations", action="store_true", help="Evaluation with citation")
     parser.add_argument("--at_most_citations", type=int, default=3, help="At most take this many documents (mostly for precision)")
     parser.add_argument("--claims_nli", action="store_true", help="Use claims for ELI5")
+    parser.add_argument("--batch", type=int,help="Test batch num to flag the result")
+
 
     # QAMPARI
     parser.add_argument("--cot", action="store_true", help="For QAMPARI, try to find colon and separate the COT and answer listing")
 
     args = parser.parse_args()
+    import os
+    if os.path.exists(args.f + ".score") and args.batch is None:
+        logger.warning("结果文件已存在，请补充批次后缀：--batch")
+        sys.exit(1)
+    elif os.path.exists(args.f + f".score_{args.batch}"):
+        logger.warning(f"同批次结果{args.batch}已存在,覆盖结果")
 
     with open(args.f) as f:
         data_with_config = json.load(f)
@@ -516,22 +640,45 @@ def main():
 
     result = {}
     result['length'] = compute_len(normalized_data)
-    result['str_em'], result['str_hit'] = compute_str_em(normalized_data)
+    result['str_em'], result['str_hit'] = compute_str_em(normalized_data) #Compute STR-EM metric (only for ASQA)
     if qampari:
+        logger.info("------1.qampari----------------")
         result.update(compute_qampari_f1(normalized_data, cot=args.cot))
-    if not args.no_rouge:
-        result['rougeLsum'] = compute_rouge(normalized_data)
-    if args.qa:
-        result.update(compute_qa(normalized_data))
-    if args.mauve:
-        result['mauve'] = compute_mauve(normalized_data)
-    if args.citations: 
-        result.update(compute_autoais(data, qampari=qampari, at_most_citations=args.at_most_citations))
-    if args.claims_nli:
-        result["claims_nli"] = compute_claims(normalized_data)
 
-    print(result)
-    json.dump(result, open(args.f + ".score", "w"), indent=4)
+    if not args.no_rouge:
+        logger.info("------2.rougeLsum--------------")
+        result['rougeLsum'] = compute_rouge(normalized_data)
+        logger.info(f"[RougeLsum sesult] {result['rougeLsum']}")
+
+    if args.qa:
+        logger.info("------3.qa---------------------")
+        result.update(compute_qa(normalized_data))
+
+    if args.mauve:# Fluency@ compution
+        logger.info("------4.compute_mauve----------")
+        result['mauve'] = compute_mauve(normalized_data)
+
+    if args.citations: # Citation quality compution
+        logger.info("------5.citations--------------")
+        global citations_prompt_tokens_total, citations_completion_tokens_total,citations_tokens_total
+        result.update(compute_autoais(data, qampari=qampari, at_most_citations=args.at_most_citations))
+        usage=f"Prompt_token(total)={citations_prompt_tokens_total},completion_token(total)={citations_completion_tokens_total},total_tokens={citations_tokens_total}" 
+        result['citation_usage'] = usage
+        logger.info(f"[Citation] Usage:{usage}")
+
+    if args.claims_nli:#Correctness
+        logger.info("------6.correctness by claims_gpt--------------")
+        global claims_prompt_tokens_total, claims_completion_tokens_total,claims_tokens_total
+        result["claims_nli"] = compute_claims(normalized_data)
+        usage=f"Prompt_token(total)={claims_prompt_tokens_total},completion_token(total)={claims_completion_tokens_total},total_tokens={claims_tokens_total}" 
+        result['correctness_usage'] = usage
+        logger.info(f"[Correc.] Usage:{usage}")
+
+    logger.info(str(result))
+    if args.batch:
+        json.dump(result, open(args.f + f".score_{args.batch}", "w"), indent=4)
+    else:
+        json.dump(result, open(args.f + f".score", "w"), indent=4)
 
 
 if __name__ == "__main__":

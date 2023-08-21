@@ -1,0 +1,51 @@
+#Vanilla
+
+There is a higher than 90% chance of someone sharing at least a birthday with someone else in a group of more than 300 million people in the US [2]. 
+The birthday paradox states that in a group of 23 people, there is a 50% chance that two people share the same birthday [4]. 
+To do better than a 50/50 chance of two people sharing the same birthday, you would have to get together in a room with more than 23 people [1][4][5]. 
+In a group of 44 people, there's a 93% chance that two of them could share a birthday [1]. 
+Therefore, it is possible to have over a 90% chance for two people, out of a group of 50, to share the same birthday."
+
+
+
+#BJSW
+In a group of just 23 people, there is a 50% chance that two people could share a birthday [4]. 
+The birthday paradox, which says that in a group of 23 people, there is a 50% chance that two people share the same birthday [4][5].
+In a group of 44 people, there's a 93% chance that two of them could share a cake [1]. 
+In a group of 75, there's about a 75% chance [2]. 
+Therefore, it is possible to have over a 90% chance for two people, out of a group of 50, to share the same birthday [Insufficient information to answer].
+
+
+--prompt v1
+
+Please answer the questions of the user ONLY based on the provided documents.Ensure responses are factual, unbiased, and properly cited.\n# Current date:2023/08/17\n
+# Instructions:\n-Use only the FDA knowledge-base provided to compose a thorough response to the given query.\n-Include proper citations in [ID] notation for all supporting information.
+\n-If multiple subjects with the same name are found in the search results, write separate answers for each subject.
+\n-All factual claims must be cited.
+\n-If the provided results cannot answer the user's question, respond with 'Insufficient information to answer'.
+\n-Summarize your references and cite them using [References list]: [ID](Title,Date of publication) notation after responding.",
+
+--prompt v2
+
+Instructions:Please answer the question of the user ONLY based on the provided documents.Ensure responses are factual, unbiased, and properly cited.Use only the provided documents to compose a thorough response to the given question.
+Include proper citations in [ID] notation for all supporting information.If multiple subjects with the same name are found in the search results, write separate answers for each subject.All factual claims must be cited.If the provided results cannot answer the user's question, respond with 'Insufficient information to answer'.Summarize your references and cite them using [References list]: [ID](Title,Date of publication) notation after responding.",
+
+---v1
+Scotland and Ireland have different historical, political and economic backgrounds that have influenced their independence movements. Scotland has been able to plan a referendum on independence because of its unique relationship with the UK and the support of the Scottish National Party [2][3][4]. On the other hand, Ireland has been fighting for independence for decades due to its history of colonization, political instability and religious conflicts [5]. It is important to note that the independence movements of both countries are complex and multifaceted, and cannot be fully explained by a single factor."
+
+---v2
+Scotland is planning a referendum on independence, while Ireland has been fighting for independence for decades because they have different historical and political contexts [1][4]. Scotland's independence referendum was held in 2014, and the idea of a second referendum on independence has been proposed after the Brexit vote [3][4]. On the other hand, Ireland has been fighting for independence since the early 1600s [4]. It is suggested that there ought to be another Scottish independence referendum once Britain leaves the EU because Scotland voted strongly to remain in the EU at the 2015 referendum [4]. The idea of Northern Ireland joining the Republic of Ireland has also been suggested after Brexit [4].
+
+
+  
+--prompt V3
+Instructions:Ensure responses are factual, unbiased, and properly cited.Include proper citations in [ID] notation for all supporting information.If multiple subjects with the same name are found in the search results, write separate answers for each subject.All factual claims must be cited.",
+
+
+--- vanilla
+Instruction: 
+-Write an accurate, engaging, and concise answer for the given question using only the provided search results (some of which might be irrelevant) and cite them properly. 
+-Use an unbiased and journalistic tone. Always cite for any factual claim. 
+-When citing several search results, use [1][2][3]. 
+-Cite at least one document and at most three documents in each sentence. 
+-If multiple documents support the sentence, only cite a minimum sufficient subset of the documents.  
