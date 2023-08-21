@@ -1,0 +1,24 @@
+{
+    "instruction": "Instruction: Please classify the provided (Premise, Hypothesis) according to the definition.\n % Definition of classification:\n Entailment: the hypothesis is a sentence with a similar meaning as the premise. \n Contradiction: the hypothesis is a sentence with a contradictory meaning. \n Neutral: the hypothesis is a sentence with mostly the same lexical items as the premise but a different meaning.\n Here are three examples",
+    "examples": [
+        {
+            "Premise":"Einstein's theory of relativity revolutionized physics and our understanding of space-time. [Einstein, 1905] ",
+            "Hypothesis":"Einstein developed the theory of relativity.",
+            "Classification":"Entailment"
+        },
+        {
+            "Premise":"[Passage about history of baseball] [Passage about rules of chess]",
+            "Hypothesis":"Soccer is the most popular sport in the world.", 
+            "Classification":"Neutral"
+        },
+        {
+            "Premise":"[Passage saying Einstein was a biologist]",
+            "Hypothesis":"Einstein was a physicist.",
+            "Classification":"Contradiction"
+        }
+    ],
+    "Premise":"{P}",
+    "Hypothesis":"{H}",
+    "Classification":"<result of your response>"
+    
+}

@@ -87,6 +87,8 @@ To reproduce the DPR retrieval, we refer the DPR [repo](https://github.com/faceb
 * `prompts`: folder that contains all prompt files.
 * `configs/`: folder that contains all config files to reproduce baselines.
 * `tools/`: misc code (generate summaries/snippets, reranking, etc.)
+* `task_cmd.py`: a script to chain the run.py and evla.py.
+* `task/`: folder that contains all config file for task_cmd.py
 
 
 ## Reproducing Baselines
@@ -152,20 +154,3 @@ python eval.py --f {path/to/result/file} --citations --claims_nli --mauve
 
 The evaluation result will be saved in `result/`, with the same name as the input and a suffix `.score`.
 
-## Bug or Questions?
-
-If you have any questions related to the code or the paper, feel free to email Tianyu (`tianyug@cs.princeton.edu`). If you encounter any problems when using the code, or want to report a bug, you can open an issue. Please try to specify the problem with details so we can help you better and quicker!
-
-
-
-## Citation
-
-Please cite our paper if you use ALCE in your work:
-
-```bibtex
-@article{gao2023enabling,
-   title={Enabling Large Language Models to Generate Text with Citations},
-   author={Gao, Tianyu and Yen, Howard and Yu, Jiatong and Chen, Danqi},
-   year={2023}
-}
-```
